@@ -35,9 +35,9 @@ pub(crate) struct Peer {
     pub(crate) guid: Vec<u8>,
     pub(crate) uuid: Bytes,
     pub(crate) pk: Bytes,
-    // pub(crate) user: Option<Vec<u8>>,
+    pub(crate) user: Option<Vec<u8>>,
     pub(crate) info: PeerInfo,
-    // pub(crate) disabled: bool,
+    pub(crate) disabled: bool,
     pub(crate) reg_pk: (u32, Instant), // how often register_pk
 }
 
@@ -50,8 +50,8 @@ impl Default for Peer {
             uuid: Bytes::new(),
             pk: Bytes::new(),
             info: Default::default(),
-            // user: None,
-            // disabled: false,
+            user: None,
+            disabled: false,
             reg_pk: (0, get_expired_time()),
         }
     }
@@ -142,9 +142,9 @@ impl PeerMap {
                 guid: v.guid,
                 uuid: v.uuid.into(),
                 pk: v.pk.into(),
-                // user: v.user,
+                user: v.user,
                 info: serde_json::from_str::<PeerInfo>(&v.info).unwrap_or_default(),
-                // disabled: v.status == Some(0),
+                disabled: v.status == Some(0),
                 ..Default::default()
             };
             let peer = Arc::new(RwLock::new(peer));
