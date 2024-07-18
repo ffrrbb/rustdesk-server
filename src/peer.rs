@@ -90,47 +90,50 @@ impl PeerMap {
     }
 
     #[inline]
-    pub(crate) async fn update_pk(
-        &mut self,
-        id: String,
-        peer: LockPeer,
-        addr: SocketAddr,
-        uuid: Bytes,
-        pk: Bytes,
-        ip: String,
-    ) -> register_pk_response::Result {
-        log::info!("update_pk {} {:?} {:?} {:?}", id, addr, uuid, pk);
-        let (info_str, guid) = {
-            let mut w = peer.write().await;
-            w.socket_addr = addr;
-            w.uuid = uuid.clone();
-            w.pk = pk.clone();
-            w.last_reg_time = Instant::now();
-            w.info.ip = ip;
-            (
-                serde_json::to_string(&w.info).unwrap_or_default(),
-                w.guid.clone(),
-            )
-        };
-        if guid.is_empty() {
-            match self.db.insert_peer(&id, &uuid, &pk, &info_str, &disabled).await {
-                Err(err) => {
-                    log::error!("db.insert_peer failed: {}", err);
-                    return register_pk_response::Result::SERVER_ERROR;
-                }
-                Ok(guid) => {
-                    peer.write().await.guid = guid;
-                }
-            }
-        } else {
-            if let Err(err) = self.db.update_pk(&guid, &id, &pk, &info_str).await {
-                log::error!("db.update_pk failed: {}", err);
+pub(crate) async fn update_pk(
+    &mut self,
+    id: String,
+    peer: LockPeer,
+    addr: SocketAddr,
+    uuid: Bytes,
+    pk: Bytes,
+    ip: String,
+    disabled: bool, // Añadido este parámetro
+) -> register_pk_response::Result {
+    log::info!("update_pk {} {:?} {:?} {:?}", id, addr, uuid, pk);
+    let (info_str, guid) = {
+        let mut w = peer.write().await;
+        w.socket_addr = addr;
+        w.uuid = uuid.clone();
+        w.pk = pk.clone();
+        w.last_reg_time = Instant::now();
+        w.info.ip = ip;
+        w.disabled = disabled; // Asignar el valor de disabled
+        (
+            serde_json::to_string(&w.info).unwrap_or_default(),
+            w.guid.clone(),
+        )
+    };
+    if guid.is_empty() {
+        match self.db.insert_peer(&id, &uuid, &pk, &info_str, &disabled).await {
+            Err(err) => {
+                log::error!("db.insert_peer failed: {}", err);
                 return register_pk_response::Result::SERVER_ERROR;
             }
-            log::info!("pk updated instead of insert");
+            Ok(guid) => {
+                peer.write().await.guid = guid;
+            }
         }
-        register_pk_response::Result::OK
+    } else {
+        if let Err(err) = self.db.update_pk(&guid, &id, &pk, &info_str, &disabled).await {
+            log::error!("db.update_pk failed: {}", err);
+            return register_pk_response::Result::SERVER_ERROR;
+        }
+        log::info!("pk updated instead of insert");
     }
+    register_pk_response::Result::OK
+}
+
 
     #[inline]
     pub(crate) async fn get(&self, id: &str) -> Option<LockPeer> {
