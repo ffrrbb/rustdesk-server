@@ -108,7 +108,7 @@ pub(crate) async fn update_pk(
         w.pk = pk.clone();
         w.last_reg_time = Instant::now();
         w.info.ip = ip;
-        w.disabled = some(disabled); // Asignar el valor de disabled
+        w.disabled = some(&disabled); // Asignar el valor de disabled
         (
             serde_json::to_string(&w.info).unwrap_or_default(),
             w.guid.clone(),
