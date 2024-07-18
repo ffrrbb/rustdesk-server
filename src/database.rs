@@ -43,7 +43,7 @@ pub struct Peer {
     pub pk: Vec<u8>,
     pub user: Option<Vec<u8>>,
     pub info: String,
-    pub status: bool,
+    pub status: Option<i64>,
 }
 
 impl Database {
@@ -109,7 +109,7 @@ impl Database {
         uuid: &[u8],
         pk: &[u8],
         info: &str,
-        status: &bool,
+        status: Option<i64>,
     ) -> ResultType<Vec<u8>> {
         let guid = uuid::Uuid::new_v4().as_bytes().to_vec();
         sqlx::query!(
@@ -132,7 +132,7 @@ impl Database {
         id: &str,
         pk: &[u8],
         info: &str,
-        status: &bool,
+        status: Option<i64>,
     ) -> ResultType<()> {
         sqlx::query!(
             "update peer set id=?, pk=?, info=?, status=? where guid=?",
