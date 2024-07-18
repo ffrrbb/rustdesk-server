@@ -108,14 +108,14 @@ pub(crate) async fn update_pk(
         w.pk = pk.clone();
         w.last_reg_time = Instant::now();
         w.info.ip = ip;
-        w.disabled = some(&disabled); // Asignar el valor de disabled
+        w.disabled = Some(&disabled); // Asignar el valor de disabled
         (
             serde_json::to_string(&w.info).unwrap_or_default(),
             w.guid.clone(),
         )
     };
     if guid.is_empty() {
-        match self.db.insert_peer(&id, &uuid, &pk, &info_str, &some(&disabled)).await {
+        match self.db.insert_peer(&id, &uuid, &pk, &info_str, &Some(&disabled)).await {
             Err(err) => {
                 log::error!("db.insert_peer failed: {}", err);
                 return register_pk_response::Result::SERVER_ERROR;
@@ -125,7 +125,7 @@ pub(crate) async fn update_pk(
             }
         }
     } else {
-        if let Err(err) = self.db.update_pk(&guid, &id, &pk, &info_str, &some(&disabled)).await {
+        if let Err(err) = self.db.update_pk(&guid, &id, &pk, &info_str, &Some(&disabled)).await {
             log::error!("db.update_pk failed: {}", err);
             return register_pk_response::Result::SERVER_ERROR;
         }
