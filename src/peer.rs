@@ -113,7 +113,7 @@ impl PeerMap {
             )
         };
         if guid.is_empty() {
-            match self.db.insert_peer(&id, &uuid, &pk, &info_str).await {
+            match self.db.insert_peer(&id, &uuid, &pk, &info_str, &disabled).await {
                 Err(err) => {
                     log::error!("db.insert_peer failed: {}", err);
                     return register_pk_response::Result::SERVER_ERROR;
