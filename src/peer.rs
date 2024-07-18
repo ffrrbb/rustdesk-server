@@ -115,7 +115,7 @@ pub(crate) async fn update_pk(
         )
     };
     if guid.is_empty() {
-        match self.db.insert_peer(&id, &uuid, &pk, &info_str, some(&disabled)).await {
+        match self.db.insert_peer(&id, &uuid, &pk, &info_str, &some(&disabled)).await {
             Err(err) => {
                 log::error!("db.insert_peer failed: {}", err);
                 return register_pk_response::Result::SERVER_ERROR;
@@ -125,7 +125,7 @@ pub(crate) async fn update_pk(
             }
         }
     } else {
-        if let Err(err) = self.db.update_pk(&guid, &id, &pk, &info_str, &disabled).await {
+        if let Err(err) = self.db.update_pk(&guid, &id, &pk, &info_str, &some(&disabled)).await {
             log::error!("db.update_pk failed: {}", err);
             return register_pk_response::Result::SERVER_ERROR;
         }
