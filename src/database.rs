@@ -109,15 +109,17 @@ impl Database {
         uuid: &[u8],
         pk: &[u8],
         info: &str,
+        status: Option<i64>,
     ) -> ResultType<Vec<u8>> {
         let guid = uuid::Uuid::new_v4().as_bytes().to_vec();
         sqlx::query!(
-            "insert into peer(guid, id, uuid, pk, info) values(?, ?, ?, ?, ?)",
+            "insert into peer(guid, id, uuid, pk, info, status) values(?, ?, ?, ?, ?, ?)",
             guid,
             id,
             uuid,
             pk,
-            info
+            info,
+            status
         )
         .execute(self.pool.get().await?.deref_mut())
         .await?;
@@ -125,17 +127,19 @@ impl Database {
     }
 
     pub async fn update_pk(
-        &self,
+         &self,
         guid: &Vec<u8>,
         id: &str,
         pk: &[u8],
         info: &str,
+        status: Option<i64>,
     ) -> ResultType<()> {
         sqlx::query!(
-            "update peer set id=?, pk=?, info=? where guid=?",
+            "update peer set id=?, pk=?, info=?, status=? where guid=?",
             id,
             pk,
             info,
+            status,
             guid
         )
         .execute(self.pool.get().await?.deref_mut())
