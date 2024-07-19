@@ -1,6 +1,5 @@
 use async_trait::async_trait;
 use hbb_common::{log, ResultType};
-use anyhow::Result; 
 use sqlx::{
     sqlite::SqliteConnectOptions, ConnectOptions, Connection, Error as SqlxError, SqliteConnection,
 };
@@ -53,7 +52,7 @@ impl Database {
             std::fs::File::create(url).ok();
         }
         let n: usize = std::env::var("MAX_DATABASE_CONNECTIONS")
-            .unwrap_or_else(|_| "10".to_owned())
+            .unwrap_or_else(|_| "1".to_owned())
             .parse()
             .unwrap_or(1);
         log::debug!("MAX_DATABASE_CONNECTIONS={}", n);
@@ -110,17 +109,15 @@ impl Database {
         uuid: &[u8],
         pk: &[u8],
         info: &str,
-        status: Option<i64>,
     ) -> ResultType<Vec<u8>> {
         let guid = uuid::Uuid::new_v4().as_bytes().to_vec();
         sqlx::query!(
-            "insert into peer(guid, id, uuid, pk, info, status) values(?, ?, ?, ?, ?, ?)",
+            "insert into peer(guid, id, uuid, pk, info) values(?, ?, ?, ?, ?)",
             guid,
             id,
             uuid,
             pk,
-            info,
-            status
+            info
         )
         .execute(self.pool.get().await?.deref_mut())
         .await?;
@@ -133,14 +130,12 @@ impl Database {
         id: &str,
         pk: &[u8],
         info: &str,
-        status: Option<i64>,
     ) -> ResultType<()> {
         sqlx::query!(
-            "update peer set id=?, pk=?, info=?, status=? where guid=?",
+            "update peer set id=?, pk=?, info=? where guid=?",
             id,
             pk,
             info,
-            status,
             guid
         )
         .execute(self.pool.get().await?.deref_mut())
@@ -148,11 +143,11 @@ impl Database {
         Ok(())
     }
 
-   pub async fn update_client_status(
+    pub async fn update_client_status(
     &self,
-    client_id: &str,
+    id: &str,
     status: Option<i64>,
-) -> Result<()> {
+) -> ResultType<()> { 
     sqlx::query!(
         "UPDATE peer SET status = $1 WHERE id = $2",
         status,
@@ -162,7 +157,6 @@ impl Database {
     .await?;
     Ok(())
 }
-
 }
 
 #[cfg(test)]
@@ -183,7 +177,7 @@ mod tests {
             let a = tokio::spawn(async move {
                 let empty_vec = Vec::new();
                 cloned
-                    .insert_peer(&id, &empty_vec, &empty_vec, "", Some(0))
+                    .insert_peer(&id, &empty_vec, &empty_vec, "")
                     .await
                     .unwrap();
             });
