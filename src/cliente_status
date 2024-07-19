@@ -1,0 +1,12 @@
+use rusqlite::{params, Connection, Result};
+
+// Define la función para actualizar el estado del cliente
+pub fn update_cliente_status(conn: &Connection, id: i64, status: Option<i64>) -> Result<()> {
+    // Consulta SQL para actualizar el campo status
+    let sql = "UPDATE clientes SET status = ?1 WHERE id = ?2";
+    
+    // Ejecuta la consulta SQL con los parámetros proporcionados
+    conn.execute(sql, params![status, id])?;
+    
+    Ok(())
+}
