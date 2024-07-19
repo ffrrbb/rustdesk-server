@@ -37,7 +37,7 @@ pub(crate) struct Peer {
     pub(crate) pk: Bytes,
     pub(crate) info: PeerInfo,
     pub(crate) reg_pk: (u32, Instant),
-    pub(crate) status: Option<i64>,  // Campo nuevo para el estado de conexión
+    pub(crate) disabled: bool,  // Campo para el estado de conexión
 }
 
 impl Default for Peer {
@@ -50,24 +50,7 @@ impl Default for Peer {
             pk: Bytes::new(),
             info: Default::default(),
             reg_pk: (0, get_expired_time()),
-            status: Some(0),  // Inicializado como desconectado
-        }
-    }
-}
-
-
-impl Default for Peer {
-    fn default() -> Self {
-        Self {
-            socket_addr: "0.0.0.0:0".parse().unwrap(),
-            last_reg_time: get_expired_time(),
-            guid: Vec::new(),
-            uuid: Bytes::new(),
-            pk: Bytes::new(),
-            info: Default::default(),
-            // user: None,
-            // disabled: false,
-            reg_pk: (0, get_expired_time()),
+            disabled: true,  // Inicializado como desconectado
         }
     }
 }
@@ -115,22 +98,22 @@ impl PeerMap {
         ip: String,
     ) -> register_pk_response::Result {
         log::info!("update_pk {} {:?} {:?} {:?}", id, addr, uuid, pk);
-        let (info_str, guid, status) = {
+        let (info_str, guid, disabled) = {
             let mut w = peer.write().await;
             w.socket_addr = addr;
             w.uuid = uuid.clone();
             w.pk = pk.clone();
             w.last_reg_time = Instant::now();
             w.info.ip = ip;
-            w.status = Some(1);  // actualizar estado a conectado
+            w.disabled = false;  // actualizar estado a conectado
             (
                 serde_json::to_string(&w.info).unwrap_or_default(),
                 w.guid.clone(),
-                w.status,
+                w.disabled,
             )
         };
         if guid.is_empty() {
-            match self.db.insert_peer(&id, &uuid, &pk, &info_str, status).await {
+            match self.db.insert_peer(&id, &uuid, &pk, &info_str, disabled).await {
                 Err(err) => {
                     log::error!("db.insert_peer failed: {}", err);
                     return register_pk_response::Result::SERVER_ERROR;
@@ -140,7 +123,7 @@ impl PeerMap {
                 }
             }
         } else {
-            if let Err(err) = self.db.update_pk(&guid, &id, &pk, &info_str, status).await {
+            if let Err(err) = self.db.update_pk(&guid, &id, &pk, &info_str, disabled).await {
                 log::error!("db.update_pk failed: {}", err);
                 return register_pk_response::Result::SERVER_ERROR;
             }
@@ -160,7 +143,7 @@ impl PeerMap {
                 uuid: v.uuid.into(),
                 pk: v.pk.into(),
                 info: serde_json::from_str::<PeerInfo>(&v.info).unwrap_or_default(),
-                status: v.status,
+                disabled: v.status.unwrap_or(1) != 0,
                 ..Default::default()
             };
             let peer = Arc::new(RwLock::new(peer));
@@ -174,8 +157,8 @@ impl PeerMap {
     pub(crate) async fn set_offline(&self, id: &str) {
         if let Some(peer) = self.get(id).await {
             let mut w = peer.write().await;
-            w.status = Some(0);  // establecer estado a desconectado
-            self.db.update_pk(&w.guid, &w.id, &w.pk, &w.info.ip, w.status).await.unwrap();
+            w.disabled = true;  // establecer estado a desconectado
+            self.db.update_pk(&w.guid, &w.id, &w.pk, &w.info.ip, w.disabled).await.unwrap();
         }
     }
 
