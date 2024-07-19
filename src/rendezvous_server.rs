@@ -93,19 +93,6 @@ enum LoopFailure {
 
 impl RendezvousServer {
     #[tokio::main(flavor = "multi_thread")]
-
-     pub async fn new(database_url: &str) -> ResultType<Self> {
-        let pm = PeerMap::new().await?;
-        Ok(Self {
-            tcp_punch: Arc::new(Mutex::new(HashMap::new())),
-            pm,
-            tx: ...,
-            relay_servers: Arc::new(RelayServers::new()),
-            relay_servers0: Arc::new(RelayServers::new()),
-            rendezvous_servers: Arc::new(Vec::new()),
-            inner: Arc::new(Inner::new()),
-        })
-    }
     pub async fn start(port: i32, serial: i32, key: &str, rmem: usize) -> ResultType<()> {
         let (key, sk) = Self::get_server_sk(key);
         let nat_port = port - 1;
@@ -779,7 +766,7 @@ impl RendezvousServer {
     }
 
     #[inline]
- pub async fn handle_online_request(
+    pub async fn handle_online_request(
         &mut self,
         stream: &mut FramedStream,
         peers: Vec<String>,
@@ -814,7 +801,8 @@ impl RendezvousServer {
 
         Ok(())
     }
-}
+
+    #[inline]
     async fn send_to_tcp(&mut self, msg: RendezvousMessage, addr: SocketAddr) {
         let mut tcp = self.tcp_punch.lock().await.remove(&try_into_v4(addr));
         tokio::spawn(async move {
