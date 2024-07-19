@@ -1,6 +1,6 @@
 use crate::common::*;
 use crate::peer::*;
-use crate::database::Database;
+use crate::database::database;
 use hbb_common::{
     allow_err, bail,
     bytes::{Bytes, BytesMut},
