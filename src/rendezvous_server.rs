@@ -784,13 +784,23 @@ impl RendezvousServer {
                     states[states_idx] |= 0x01 << bit_idx;
 
                     // Actualiza el estado del cliente a "online" en la base de datos
-                    update_cliente_status(peer_id.parse()?, Some(1))?;
+                    update_cliente_status(peer_id.parse()?, Some(1)).await?;
                 } else {
                     // Actualiza el estado del cliente a "offline" en la base de datos
-                    update_cliente_status(peer_id.parse()?, Some(0))?;
+                    update_cliente_status(peer_id.parse()?, Some(0)).await?;
                 }
             }
         }
+
+        let mut msg_out = RendezvousMessage::new();
+        msg_out.set_online_response(OnlineResponse {
+            states: states.into(),
+            ..Default::default()
+        });
+        stream.send(&msg_out).await?;
+
+        Ok(())
+    }
 
         let mut msg_out = RendezvousMessage::new();
         msg_out.set_online_response(OnlineResponse {
