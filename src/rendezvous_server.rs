@@ -779,15 +779,17 @@ impl RendezvousServer {
     }
 
     #[inline]
-pub async fn handle_online_request(
+ pub async fn handle_online_request(
         &mut self,
         stream: &mut FramedStream,
         peers: Vec<String>,
     ) -> ResultType<()> {
         let mut states = BytesMut::zeroed((peers.len() + 7) / 8);
+        
         for (i, peer_id) in peers.iter().enumerate() {
             if let Some(peer) = self.pm.get_in_memory(peer_id).await {
                 let elapsed = peer.read().await.last_reg_time.elapsed().as_millis() as i32;
+                
                 // bytes index from left to right
                 let states_idx = i / 8;
                 let bit_idx = 7 - i % 8;
@@ -795,12 +797,10 @@ pub async fn handle_online_request(
                     states[states_idx] |= 0x01 << bit_idx;
 
                     // Actualiza el estado del cliente a "online" en la base de datos
-                    let conn = Connection::open("base_de_datos.db")?;
-                    update_cliente_status(&conn, peer_id.parse()?, Some(1))?;
+                    update_cliente_status(peer_id.parse()?, Some(1))?;
                 } else {
                     // Actualiza el estado del cliente a "offline" en la base de datos
-                    let conn = Connection::open("base_de_datos.db")?;
-                    update_cliente_status(&conn, peer_id.parse()?, Some(0))?;
+                    update_cliente_status(peer_id.parse()?, Some(0))?;
                 }
             }
         }
