@@ -3,27 +3,21 @@ use crate::database;
 use hbb_common::{
     bytes::Bytes,
     log,
+    rendezvous_proto::*,
     tokio::sync::{Mutex, RwLock},
     ResultType,
 };
 use serde_derive::{Deserialize, Serialize};
-use std::{
-    collections::{HashMap, HashSet},
-    net::SocketAddr,
-    sync::Arc,
-    time::{Duration, Instant},
-};
+use std::{collections::HashMap, collections::HashSet, net::SocketAddr, sync::Arc, time::Instant};
 
 type IpBlockMap = HashMap<String, ((u32, Instant), (HashSet<String>, Instant))>;
 type UserStatusMap = HashMap<Vec<u8>, Arc<(Option<Vec<u8>>, bool)>>;
 type IpChangesMap = HashMap<String, (Instant, HashMap<String, i32>)>;
-
 lazy_static::lazy_static! {
     pub(crate) static ref IP_BLOCKER: Mutex<IpBlockMap> = Default::default();
     pub(crate) static ref USER_STATUS: RwLock<UserStatusMap> = Default::default();
     pub(crate) static ref IP_CHANGES: Mutex<IpChangesMap> = Default::default();
 }
-
 pub static IP_CHANGE_DUR: u64 = 180;
 pub static IP_CHANGE_DUR_X2: u64 = IP_CHANGE_DUR * 2;
 pub static DAY_SECONDS: u64 = 3600 * 24;
