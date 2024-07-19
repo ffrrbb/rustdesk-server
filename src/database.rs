@@ -149,11 +149,11 @@ impl Database {
     status: Option<i64>,
 ) -> ResultType<()> { 
     sqlx::query!(
-        "UPDATE peer SET status = $1 WHERE id = $2",
+        "update peer set status=? where id=?",
         status,
         id
     )
-    .execute(&self.pool)
+    .execute(self.pool.get().await?.deref_mut())
     .await?;
     Ok(())
 }
