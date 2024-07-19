@@ -151,7 +151,7 @@ impl Database {
     sqlx::query!(
         "UPDATE peer SET status = $1 WHERE id = $2",
         status,
-        client_id
+        id
     )
     .execute(&self.pool)
     .await?;
