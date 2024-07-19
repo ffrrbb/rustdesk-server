@@ -1,18 +1,19 @@
-use rusqlite::{params, Connection, Result};
+use sqlx::{sqlite::SqliteConnectOptions, ConnectOptions, Error as SqlxError, SqliteConnection};
 use std::env;
+use async_trait::async_trait;
 
 /// Obtiene la URL de la base de datos desde una variable de entorno y abre una conexión.
 ///
 /// # Returns
 ///
-/// `Result<Connection>` - Un `Result` que contiene la conexión o un error.
+/// `Result<SqliteConnection, SqlxError>` - Un `Result` que contiene la conexión o un error.
 ///
 /// # Example
 ///
 /// ```
-/// let conn = get_db_connection()?;
+/// let conn = get_db_connection().await?;
 /// ```
-fn get_db_connection() -> Result<Connection> {
+pub async fn get_db_connection() -> Result<SqliteConnection, SqlxError> {
     // Lee la URL de la base de datos desde la variable de entorno DB_URL
     let db_url = env::var("DB_URL").unwrap_or_else(|_| {
         let default_db = "db_v2.sqlite3".to_owned();
@@ -32,7 +33,8 @@ fn get_db_connection() -> Result<Connection> {
     log::info!("DB_URL={}", db_url);
 
     // Abre y retorna la conexión a la base de datos
-    Connection::open(db_url)
+    let options = SqliteConnectOptions::new().filename(db_url);
+    SqliteConnection::connect_with(&options).await
 }
 
 /// Actualiza el estado del cliente en la base de datos.
@@ -44,23 +46,27 @@ fn get_db_connection() -> Result<Connection> {
 ///
 /// # Returns
 ///
-/// `Result<()>` - Un `Result` que indica el éxito o el fallo de la operación.
+/// `Result<(), SqlxError>` - Un `Result` que indica el éxito o el fallo de la operación.
 ///
 /// # Example
 ///
 /// ```
-/// let conn = get_db_connection()?;
-/// update_cliente_status(&conn, 1, Some(42))?;
+/// let conn = get_db_connection().await?;
+/// update_cliente_status(&conn, 1, Some(42)).await?;
 /// ```
-pub fn update_cliente_status(id: i64, status: Option<i64>) -> Result<()> {
+pub async fn update_cliente_status(id: i64, status: Option<i64>) -> Result<(), SqlxError> {
     // Obtiene la conexión a la base de datos
-    let conn = get_db_connection()?;
+    let mut conn = get_db_connection().await?;
 
     // Consulta SQL para actualizar el campo status
     let sql = "UPDATE clientes SET status = ?1 WHERE id = ?2";
     
     // Ejecuta la consulta SQL con los parámetros proporcionados
-    conn.execute(sql, params![status, id])?;
+    sqlx::query(sql)
+        .bind(status)
+        .bind(id)
+        .execute(&mut conn)
+        .await?;
     
     Ok(())
 }
