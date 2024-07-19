@@ -765,7 +765,7 @@ impl RendezvousServer {
     }
 
     #[inline]
-   async fn handle_online_request(
+ async fn handle_online_request(
     &mut self,
     stream: &mut FramedStream,
     peers: Vec<String>,
@@ -780,7 +780,7 @@ impl RendezvousServer {
             let status = if elapsed < REG_TIMEOUT { Some(1) } else { Some(0) };
             
             // Actualizar el estado en la base de datos
-            if let Err(e) = update_client_status(peer_id.clone(), status).await {
+            if let Err(e) = self.database.update_client_status(peer_id, status).await {
                 eprintln!("Error updating client status for {}: {:?}", peer_id, e);
             }
             
@@ -799,8 +799,6 @@ impl RendezvousServer {
 
     Ok(())
 }
-
-    #[inline]
     async fn send_to_tcp(&mut self, msg: RendezvousMessage, addr: SocketAddr) {
         let mut tcp = self.tcp_punch.lock().await.remove(&try_into_v4(addr));
         tokio::spawn(async move {
