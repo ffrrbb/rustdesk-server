@@ -415,18 +415,6 @@ async fn handle_connection(
     });
 }
 
-use rusqlite::{params, Connection, Result};
-
-// Función para actualizar el estado en la base de datos SQLite
-async fn update_client_status(client_id: &str, status: Option<i64>) -> Result<()> {
-    let conn = Connection::open("path/to/your/database.sqlite3")?;
-    conn.execute(
-        "UPDATE clients SET status = ?1 WHERE id = ?2",
-        params![status, client_id],
-    )?;
-    Ok(())
-}
-
 async fn make_pair(
     stream: TcpStream,
     addr: SocketAddr,
