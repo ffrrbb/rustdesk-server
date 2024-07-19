@@ -35,10 +35,9 @@ pub(crate) struct Peer {
     pub(crate) guid: Vec<u8>,
     pub(crate) uuid: Bytes,
     pub(crate) pk: Bytes,
-    pub(crate) user: Option<Vec<u8>>,
     pub(crate) info: PeerInfo,
-    pub(crate) disabled: bool,
-    pub(crate) reg_pk: (u32, Instant), // how often register_pk
+    pub(crate) reg_pk: (u32, Instant),
+    pub(crate) status: Option<i64>,  // Campo nuevo para el estado de conexión
 }
 
 impl Default for Peer {
@@ -50,8 +49,24 @@ impl Default for Peer {
             uuid: Bytes::new(),
             pk: Bytes::new(),
             info: Default::default(),
-            user: None,
-            disabled: false,
+            reg_pk: (0, get_expired_time()),
+            status: Some(0),  // Inicializado como desconectado
+        }
+    }
+}
+
+
+impl Default for Peer {
+    fn default() -> Self {
+        Self {
+            socket_addr: "0.0.0.0:0".parse().unwrap(),
+            last_reg_time: get_expired_time(),
+            guid: Vec::new(),
+            uuid: Bytes::new(),
+            pk: Bytes::new(),
+            info: Default::default(),
+            // user: None,
+            // disabled: false,
             reg_pk: (0, get_expired_time()),
         }
     }
@@ -90,50 +105,49 @@ impl PeerMap {
     }
 
     #[inline]
-pub(crate) async fn update_pk(
-    &mut self,
-    id: String,
-    peer: LockPeer,
-    addr: SocketAddr,
-    uuid: Bytes,
-    pk: Bytes,
-    ip: String,
-    disabled: Bool, // Añadido este parámetro
-) -> register_pk_response::Result {
-    log::info!("update_pk {} {:?} {:?} {:?}", id, addr, uuid, pk);
-    let (info_str, guid) = {
-        let mut w = peer.write().await;
-        w.socket_addr = addr;
-        w.uuid = uuid.clone();
-        w.pk = pk.clone();
-        w.last_reg_time = Instant::now();
-        w.info.ip = ip;
-        w.disabled = Some(&disabled); // Asignar el valor de disabled
-        (
-            serde_json::to_string(&w.info).unwrap_or_default(),
-            w.guid.clone(),
-        )
-    };
-    if guid.is_empty() {
-        match self.db.insert_peer(&id, &uuid, &pk, &info_str, &Some(&disabled)).await {
-            Err(err) => {
-                log::error!("db.insert_peer failed: {}", err);
+    pub(crate) async fn update_pk(
+        &mut self,
+        id: String,
+        peer: LockPeer,
+        addr: SocketAddr,
+        uuid: Bytes,
+        pk: Bytes,
+        ip: String,
+    ) -> register_pk_response::Result {
+        log::info!("update_pk {} {:?} {:?} {:?}", id, addr, uuid, pk);
+        let (info_str, guid, status) = {
+            let mut w = peer.write().await;
+            w.socket_addr = addr;
+            w.uuid = uuid.clone();
+            w.pk = pk.clone();
+            w.last_reg_time = Instant::now();
+            w.info.ip = ip;
+            w.status = Some(1);  // actualizar estado a conectado
+            (
+                serde_json::to_string(&w.info).unwrap_or_default(),
+                w.guid.clone(),
+                w.status,
+            )
+        };
+        if guid.is_empty() {
+            match self.db.insert_peer(&id, &uuid, &pk, &info_str, status).await {
+                Err(err) => {
+                    log::error!("db.insert_peer failed: {}", err);
+                    return register_pk_response::Result::SERVER_ERROR;
+                }
+                Ok(guid) => {
+                    peer.write().await.guid = guid;
+                }
+            }
+        } else {
+            if let Err(err) = self.db.update_pk(&guid, &id, &pk, &info_str, status).await {
+                log::error!("db.update_pk failed: {}", err);
                 return register_pk_response::Result::SERVER_ERROR;
             }
-            Ok(guid) => {
-                peer.write().await.guid = guid;
-            }
+            log::info!("pk updated instead of insert");
         }
-    } else {
-        if let Err(err) = self.db.update_pk(&guid, &id, &pk, &info_str, &Some(&disabled)).await {
-            log::error!("db.update_pk failed: {}", err);
-            return register_pk_response::Result::SERVER_ERROR;
-        }
-        log::info!("pk updated instead of insert");
+        register_pk_response::Result::OK
     }
-    register_pk_response::Result::OK
-}
-
 
     #[inline]
     pub(crate) async fn get(&self, id: &str) -> Option<LockPeer> {
@@ -145,9 +159,8 @@ pub(crate) async fn update_pk(
                 guid: v.guid,
                 uuid: v.uuid.into(),
                 pk: v.pk.into(),
-                user: v.user,
                 info: serde_json::from_str::<PeerInfo>(&v.info).unwrap_or_default(),
-                disabled: v.status == Some(0),
+                status: v.status,
                 ..Default::default()
             };
             let peer = Arc::new(RwLock::new(peer));
@@ -155,6 +168,15 @@ pub(crate) async fn update_pk(
             return Some(peer);
         }
         None
+    }
+
+    #[inline]
+    pub(crate) async fn set_offline(&self, id: &str) {
+        if let Some(peer) = self.get(id).await {
+            let mut w = peer.write().await;
+            w.status = Some(0);  // establecer estado a desconectado
+            self.db.update_pk(&w.guid, &w.id, &w.pk, &w.info.ip, w.status).await.unwrap();
+        }
     }
 
     #[inline]
