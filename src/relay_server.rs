@@ -1,5 +1,4 @@
 use async_speed_limit::Limiter;
-use crate::database::Database; 
 use async_trait::async_trait;
 use hbb_common::{
     allow_err, bail,
@@ -363,11 +362,8 @@ async fn handle_connection(
     limiter: &Limiter,
     key: &str,
     ws: bool,
-    db: Arc<Database>, // Pasar la instancia de Database
 ) {
     let ip = hbb_common::try_into_v4(addr).ip();
-    let ip = ip.to_string();
-
     if !ws && ip.is_loopback() {
         let limiter = limiter.clone();
         tokio::spawn(async move {
@@ -382,36 +378,15 @@ async fn handle_connection(
         });
         return;
     }
-
+    let ip = ip.to_string();
     if BLOCKLIST.read().await.get(&ip).is_some() {
         log::info!("{} blocked", ip);
         return;
     }
-
     let key = key.to_owned();
     let limiter = limiter.clone();
-    let client_id = ip.clone(); // Suponiendo que usamos IP como ID del cliente
-
-    // Obtener una conexión a la base de datos
-    let db_clone = db.clone(); // Clonar el handle a la base de datos
-
-    // Actualizar estado a Some(1) (online) cuando el cliente se conecta
-    task::spawn_blocking(move || {
-        if let Err(err) = db_clone.update_client_status(&client_id, Some(1)).await {
-            eprintln!("Error updating client status: {}", err);
-        }
-    }).await.ok();
-
     tokio::spawn(async move {
         allow_err!(make_pair(stream, addr, &key, limiter, ws).await);
-        
-        // Actualizar estado a None (offline) cuando el cliente se desconecta
-        let db_clone = db.clone(); // Clonar el handle a la base de datos
-        task::spawn_blocking(move || {
-            if let Err(err) = db_clone.update_client_status(&client_id, None).await {
-                eprintln!("Error updating client status: {}", err);
-            }
-        }).await.ok();
     });
 }
 
