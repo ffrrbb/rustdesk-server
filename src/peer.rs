@@ -1,23 +1,28 @@
-use crate::common::*;
 use crate::database;
 use hbb_common::{
     bytes::Bytes,
     log,
-    rendezvous_proto::*,
     tokio::sync::{Mutex, RwLock},
     ResultType,
 };
 use serde_derive::{Deserialize, Serialize};
-use std::{collections::HashMap, collections::HashSet, net::SocketAddr, sync::Arc, time::Instant};
+use std::{
+    collections::{HashMap, HashSet},
+    net::SocketAddr,
+    sync::Arc,
+    time::{Instant, Duration},
+};
 
 type IpBlockMap = HashMap<String, ((u32, Instant), (HashSet<String>, Instant))>;
 type UserStatusMap = HashMap<Vec<u8>, Arc<(Option<Vec<u8>>, bool)>>;
 type IpChangesMap = HashMap<String, (Instant, HashMap<String, i32>)>;
+
 lazy_static::lazy_static! {
     pub(crate) static ref IP_BLOCKER: Mutex<IpBlockMap> = Default::default();
     pub(crate) static ref USER_STATUS: RwLock<UserStatusMap> = Default::default();
     pub(crate) static ref IP_CHANGES: Mutex<IpChangesMap> = Default::default();
 }
+
 pub static IP_CHANGE_DUR: u64 = 180;
 pub static IP_CHANGE_DUR_X2: u64 = IP_CHANGE_DUR * 2;
 pub static DAY_SECONDS: u64 = 3600 * 24;
@@ -44,12 +49,12 @@ impl Default for Peer {
     fn default() -> Self {
         Self {
             socket_addr: "0.0.0.0:0".parse().unwrap(),
-            last_reg_time: get_expired_time(),
+            last_reg_time: Instant::now(),
             guid: Vec::new(),
             uuid: Bytes::new(),
             pk: Bytes::new(),
             info: Default::default(),
-            reg_pk: (0, get_expired_time()),
+            reg_pk: (0, Instant::now()),
             disabled: true,  // Inicializado como desconectado
         }
     }
@@ -65,7 +70,7 @@ pub(crate) struct PeerMap {
 
 impl PeerMap {
     pub(crate) async fn new() -> ResultType<Self> {
-        let db = std::env::var("DB_URL").unwrap_or({
+        let db = std::env::var("DB_URL").unwrap_or_else(|| {
             let mut db = "db_v2.sqlite3".to_owned();
             #[cfg(all(windows, not(debug_assertions)))]
             {
@@ -96,7 +101,7 @@ impl PeerMap {
         uuid: Bytes,
         pk: Bytes,
         ip: String,
-    ) -> register_pk_response::Result {
+    ) -> ResultType<()> {
         log::info!("update_pk {} {:?} {:?} {:?}", id, addr, uuid, pk);
         let (info_str, guid, disabled) = {
             let mut w = peer.write().await;
@@ -105,7 +110,7 @@ impl PeerMap {
             w.pk = pk.clone();
             w.last_reg_time = Instant::now();
             w.info.ip = ip;
-            w.disabled = false;  // actualizar estado a conectado
+            w.disabled = false;  // Actualizar estado a conectado
             (
                 serde_json::to_string(&w.info).unwrap_or_default(),
                 w.guid.clone(),
@@ -113,23 +118,25 @@ impl PeerMap {
             )
         };
         if guid.is_empty() {
-            match self.db.insert_peer(&id, &uuid, &pk, &info_str, disabled).await {
+            match self.db.insert_peer(&id, &uuid, &pk, &info_str, Some(disabled as i64)).await {
                 Err(err) => {
                     log::error!("db.insert_peer failed: {}", err);
-                    return register_pk_response::Result::SERVER_ERROR;
+                    Err(err)
                 }
                 Ok(guid) => {
                     peer.write().await.guid = guid;
+                    Ok(())
                 }
             }
         } else {
-            if let Err(err) = self.db.update_pk(&guid, &id, &pk, &info_str, disabled).await {
+            if let Err(err) = self.db.update_pk(&guid, &id, &pk, &info_str, Some(disabled as i64)).await {
                 log::error!("db.update_pk failed: {}", err);
-                return register_pk_response::Result::SERVER_ERROR;
+                Err(err)
+            } else {
+                log::info!("pk updated instead of insert");
+                Ok(())
             }
-            log::info!("pk updated instead of insert");
         }
-        register_pk_response::Result::OK
     }
 
     #[inline]
@@ -157,8 +164,8 @@ impl PeerMap {
     pub(crate) async fn set_offline(&self, id: &str) {
         if let Some(peer) = self.get(id).await {
             let mut w = peer.write().await;
-            w.disabled = true;  // establecer estado a desconectado
-            self.db.update_pk(&w.guid, &w.id, &w.pk, &w.info.ip, w.disabled).await.unwrap();
+            w.disabled = true;  // Establecer estado a desconectado
+            self.db.update_pk(&w.guid, &w.id, &w.pk, &w.info.ip, Some(w.disabled as i64)).await.unwrap();
         }
     }
 
@@ -171,7 +178,7 @@ impl PeerMap {
         if let Some(p) = w.get(id) {
             return p.clone();
         }
-        let tmp = LockPeer::default();
+        let tmp = Arc::new(RwLock::new(Peer::default()));
         w.insert(id.to_owned(), tmp.clone());
         tmp
     }
