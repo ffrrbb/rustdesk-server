@@ -147,21 +147,23 @@ impl Database {
         Ok(())
     }
 
-      pub async fn update_client_status(
-        &self,
-        client_id: &str,
-        status: Option<i64>,
-    ) -> Result<()> {
-        // Ejecutar la consulta SQL para actualizar el estado
-        sqlx::query!(
-            "UPDATE peer SET status = $1 WHERE id = $2",
-            status,
-            client_id
-        )
-        .execute(&self.pool)
-        .await?;
-        Ok(())
-    }
+     use anyhow::Result; // Importar `anyhow::Result`
+
+pub async fn update_client_status(
+    &self,
+    client_id: &str,
+    status: Option<i64>,
+) -> Result<()> {
+    sqlx::query!(
+        "UPDATE peer SET status = $1 WHERE id = $2",
+        status,
+        client_id
+    )
+    .execute(&self.pool)
+    .await?;
+    Ok(())
+}
+
 }
 
 #[cfg(test)]
