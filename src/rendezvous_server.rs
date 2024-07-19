@@ -1,7 +1,6 @@
 use crate::common::*;
 use crate::peer::*;
 use crate::cliente_status::update_cliente_status;
-use rusqlite::Connection;
 use hbb_common::{
     allow_err, bail,
     bytes::{Bytes, BytesMut},
