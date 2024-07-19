@@ -1,6 +1,7 @@
 use crate::common::*;
 use crate::peer::*;
-use crate::database::database;
+use crate::cliente_status::update_cliente_status;
+use rusqlite::Connection;
 use hbb_common::{
     allow_err, bail,
     bytes::{Bytes, BytesMut},
@@ -778,7 +779,7 @@ impl RendezvousServer {
     }
 
     #[inline]
-async fn handle_online_request(
+pub async fn handle_online_request(
         &mut self,
         stream: &mut FramedStream,
         peers: Vec<String>,
@@ -790,15 +791,16 @@ async fn handle_online_request(
                 // bytes index from left to right
                 let states_idx = i / 8;
                 let bit_idx = 7 - i % 8;
-                let status = if elapsed < REG_TIMEOUT { Some(1) } else { Some(0) };
-
-                // Actualizar el estado en la base de datos
-                if let Err(e) = self.pm.db.update_client_status(peer_id, status).await {
-                    eprintln!("Error updating client status for {}: {:?}", peer_id, e);
-                }
-
                 if elapsed < REG_TIMEOUT {
                     states[states_idx] |= 0x01 << bit_idx;
+
+                    // Actualiza el estado del cliente a "online" en la base de datos
+                    let conn = Connection::open("base_de_datos.db")?;
+                    update_cliente_status(&conn, peer_id.parse()?, Some(1))?;
+                } else {
+                    // Actualiza el estado del cliente a "offline" en la base de datos
+                    let conn = Connection::open("base_de_datos.db")?;
+                    update_cliente_status(&conn, peer_id.parse()?, Some(0))?;
                 }
             }
         }
