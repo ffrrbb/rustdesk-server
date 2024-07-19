@@ -1,5 +1,6 @@
 use async_trait::async_trait;
 use hbb_common::{log, ResultType};
+use anyhow::Result; 
 use sqlx::{
     sqlite::SqliteConnectOptions, ConnectOptions, Connection, Error as SqlxError, SqliteConnection,
 };
@@ -147,9 +148,7 @@ impl Database {
         Ok(())
     }
 
-     use anyhow::Result; // Importar `anyhow::Result`
-
-pub async fn update_client_status(
+   pub async fn update_client_status(
     &self,
     client_id: &str,
     status: Option<i64>,
