@@ -1,3 +1,4 @@
+use crate::common::*;
 use crate::database;
 use hbb_common::{
     bytes::Bytes,
@@ -10,7 +11,7 @@ use std::{
     collections::{HashMap, HashSet},
     net::SocketAddr,
     sync::Arc,
-    time::{Instant, Duration},
+    time::{Duration, Instant},
 };
 
 type IpBlockMap = HashMap<String, ((u32, Instant), (HashSet<String>, Instant))>;
@@ -41,7 +42,7 @@ pub(crate) struct Peer {
     pub(crate) uuid: Bytes,
     pub(crate) pk: Bytes,
     pub(crate) info: PeerInfo,
-    pub(crate) reg_pk: (u32, Instant),
+    pub(crate) reg_pk: (u32, Instant), // how often register_pk
     pub(crate) disabled: bool,  // Campo para el estado de conexión
 }
 
@@ -55,7 +56,7 @@ impl Default for Peer {
             pk: Bytes::new(),
             info: Default::default(),
             reg_pk: (0, Instant::now()),
-            disabled: true,  // Inicializado como desconectado
+            disabled: false,  // Inicializado como conectado
         }
     }
 }
@@ -70,7 +71,7 @@ pub(crate) struct PeerMap {
 
 impl PeerMap {
     pub(crate) async fn new() -> ResultType<Self> {
-        let db = std::env::var("DB_URL").unwrap_or({
+        let db = std::env::var("DB_URL").unwrap_or_else(|| {
             let mut db = "db_v2.sqlite3".to_owned();
             #[cfg(all(windows, not(debug_assertions)))]
             {
@@ -101,7 +102,7 @@ impl PeerMap {
         uuid: Bytes,
         pk: Bytes,
         ip: String,
-    ) -> ResultType<()> {
+    ) -> register_pk_response::Result {
         log::info!("update_pk {} {:?} {:?} {:?}", id, addr, uuid, pk);
         let (info_str, guid, disabled) = {
             let mut w = peer.write().await;
@@ -110,7 +111,7 @@ impl PeerMap {
             w.pk = pk.clone();
             w.last_reg_time = Instant::now();
             w.info.ip = ip;
-            w.disabled = false;  // Actualizar estado a conectado
+            w.disabled = false;  // actualizar estado a conectado
             (
                 serde_json::to_string(&w.info).unwrap_or_default(),
                 w.guid.clone(),
@@ -118,25 +119,23 @@ impl PeerMap {
             )
         };
         if guid.is_empty() {
-            match self.db.insert_peer(&id, &uuid, &pk, &info_str, Some(disabled as i64)).await {
+            match self.db.insert_peer(&id, &uuid, &pk, &info_str, disabled).await {
                 Err(err) => {
                     log::error!("db.insert_peer failed: {}", err);
-                    Err(err)
+                    return register_pk_response::Result::SERVER_ERROR;
                 }
                 Ok(guid) => {
                     peer.write().await.guid = guid;
-                    Ok(())
                 }
             }
         } else {
             if let Err(err) = self.db.update_pk(&guid, &id, &pk, &info_str, Some(disabled as i64)).await {
                 log::error!("db.update_pk failed: {}", err);
-                Err(err)
-            } else {
-                log::info!("pk updated instead of insert");
-                Ok(())
+                return register_pk_response::Result::SERVER_ERROR;
             }
+            log::info!("pk updated instead of insert");
         }
+        register_pk_response::Result::OK
     }
 
     #[inline]
@@ -164,8 +163,10 @@ impl PeerMap {
     pub(crate) async fn set_offline(&self, id: &str) {
         if let Some(peer) = self.get(id).await {
             let mut w = peer.write().await;
-            w.disabled = true;  // Establecer estado a desconectado
-            self.db.update_pk(&w.guid, &w.id, &w.pk, &w.info.ip, Some(w.disabled as i64)).await.unwrap();
+            w.disabled = true;  // establecer estado a desconectado
+            if let Err(err) = self.db.update_pk(&w.guid, &id, &w.pk, &w.info.ip, Some(1)).await {
+                log::error!("db.update_pk failed: {}", err);
+            }
         }
     }
 
