@@ -791,7 +791,7 @@ impl RendezvousServer {
                 }
             }
         }
-
+    }
         let mut msg_out = RendezvousMessage::new();
         msg_out.set_online_response(OnlineResponse {
             states: states.into(),
