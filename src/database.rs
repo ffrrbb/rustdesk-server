@@ -103,7 +103,7 @@ impl Database {
         .await?)
     }
 
-    pub async fn insert_peer(
+     pub async fn insert_peer(
         &self,
         id: &str,
         uuid: &[u8],
@@ -127,7 +127,7 @@ impl Database {
     }
 
     pub async fn update_pk(
-         &self,
+        &self,
         guid: &Vec<u8>,
         id: &str,
         pk: &[u8],
