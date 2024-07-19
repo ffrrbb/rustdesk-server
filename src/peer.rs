@@ -35,22 +35,24 @@ pub(crate) struct Peer {
     pub(crate) guid: Vec<u8>,
     pub(crate) uuid: Bytes,
     pub(crate) pk: Bytes,
+    // pub(crate) user: Option<Vec<u8>>,
     pub(crate) info: PeerInfo,
+    // pub(crate) disabled: bool,
     pub(crate) reg_pk: (u32, Instant), // how often register_pk
-    pub(crate) disabled: bool,  // Campo para el estado de conexión
 }
 
 impl Default for Peer {
     fn default() -> Self {
         Self {
             socket_addr: "0.0.0.0:0".parse().unwrap(),
-            last_reg_time: Instant::now(),
+            last_reg_time: get_expired_time(),
             guid: Vec::new(),
             uuid: Bytes::new(),
             pk: Bytes::new(),
             info: Default::default(),
-            reg_pk: (0, Instant::now()),
-            disabled: false,  // Inicializado como conectado
+            // user: None,
+            // disabled: false,
+            reg_pk: (0, get_expired_time()),
         }
     }
 }
@@ -64,7 +66,7 @@ pub(crate) struct PeerMap {
 }
 
 impl PeerMap {
-   pub(crate) async fn new() -> ResultType<Self> {
+    pub(crate) async fn new() -> ResultType<Self> {
         let db = std::env::var("DB_URL").unwrap_or({
             let mut db = "db_v2.sqlite3".to_owned();
             #[cfg(all(windows, not(debug_assertions)))]
@@ -98,22 +100,20 @@ impl PeerMap {
         ip: String,
     ) -> register_pk_response::Result {
         log::info!("update_pk {} {:?} {:?} {:?}", id, addr, uuid, pk);
-        let (info_str, guid, disabled) = {
+        let (info_str, guid) = {
             let mut w = peer.write().await;
             w.socket_addr = addr;
             w.uuid = uuid.clone();
             w.pk = pk.clone();
             w.last_reg_time = Instant::now();
             w.info.ip = ip;
-            w.disabled = false;  // actualizar estado a conectado
             (
                 serde_json::to_string(&w.info).unwrap_or_default(),
                 w.guid.clone(),
-                w.disabled,
             )
         };
         if guid.is_empty() {
-            match self.db.insert_peer(&id, &uuid, &pk, &info_str, Some(disabled as i64)).await {
+            match self.db.insert_peer(&id, &uuid, &pk, &info_str).await {
                 Err(err) => {
                     log::error!("db.insert_peer failed: {}", err);
                     return register_pk_response::Result::SERVER_ERROR;
@@ -123,7 +123,7 @@ impl PeerMap {
                 }
             }
         } else {
-            if let Err(err) = self.db.update_pk(&guid, &id, &pk, &info_str, Some(disabled as i64)).await {
+            if let Err(err) = self.db.update_pk(&guid, &id, &pk, &info_str).await {
                 log::error!("db.update_pk failed: {}", err);
                 return register_pk_response::Result::SERVER_ERROR;
             }
@@ -142,8 +142,9 @@ impl PeerMap {
                 guid: v.guid,
                 uuid: v.uuid.into(),
                 pk: v.pk.into(),
+                // user: v.user,
                 info: serde_json::from_str::<PeerInfo>(&v.info).unwrap_or_default(),
-                disabled: v.status.unwrap_or(1) != 0,
+                // disabled: v.status == Some(0),
                 ..Default::default()
             };
             let peer = Arc::new(RwLock::new(peer));
@@ -151,17 +152,6 @@ impl PeerMap {
             return Some(peer);
         }
         None
-    }
-
-    #[inline]
-    pub(crate) async fn set_offline(&self, id: &str) {
-        if let Some(peer) = self.get(id).await {
-            let mut w = peer.write().await;
-            w.disabled = true;  // establecer estado a desconectado
-            if let Err(err) = self.db.update_pk(&w.guid, &id, &w.pk, &w.info.ip, Some(1)).await {
-                log::error!("db.update_pk failed: {}", err);
-            }
-        }
     }
 
     #[inline]
@@ -173,7 +163,7 @@ impl PeerMap {
         if let Some(p) = w.get(id) {
             return p.clone();
         }
-        let tmp = Arc::new(RwLock::new(Peer::default()));
+        let tmp = LockPeer::default();
         w.insert(id.to_owned(), tmp.clone());
         tmp
     }
