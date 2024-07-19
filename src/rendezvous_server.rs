@@ -1,5 +1,6 @@
 use crate::common::*;
 use crate::peer::*;
+use crate::database::*;
 use hbb_common::{
     allow_err, bail,
     bytes::{Bytes, BytesMut},
@@ -764,33 +765,40 @@ impl RendezvousServer {
     }
 
     #[inline]
-    async fn handle_online_request(
-        &mut self,
-        stream: &mut FramedStream,
-        peers: Vec<String>,
-    ) -> ResultType<()> {
-        let mut states = BytesMut::zeroed((peers.len() + 7) / 8);
-        for (i, peer_id) in peers.iter().enumerate() {
-            if let Some(peer) = self.pm.get_in_memory(peer_id).await {
-                let elapsed = peer.read().await.last_reg_time.elapsed().as_millis() as i32;
-                // bytes index from left to right
-                let states_idx = i / 8;
-                let bit_idx = 7 - i % 8;
-                if elapsed < REG_TIMEOUT {
-                    states[states_idx] |= 0x01 << bit_idx;
-                }
+   async fn handle_online_request(
+    &mut self,
+    stream: &mut FramedStream,
+    peers: Vec<String>,
+) -> ResultType<()> {
+    let mut states = BytesMut::zeroed((peers.len() + 7) / 8);
+    for (i, peer_id) in peers.iter().enumerate() {
+        if let Some(peer) = self.pm.get_in_memory(peer_id).await {
+            let elapsed = peer.read().await.last_reg_time.elapsed().as_millis() as i32;
+            // bytes index from left to right
+            let states_idx = i / 8;
+            let bit_idx = 7 - i % 8;
+            let status = if elapsed < REG_TIMEOUT { Some(1) } else { Some(0) };
+            
+            // Actualizar el estado en la base de datos
+            if let Err(e) = update_client_status(peer_id.clone(), status).await {
+                eprintln!("Error updating client status for {}: {:?}", peer_id, e);
+            }
+            
+            if elapsed < REG_TIMEOUT {
+                states[states_idx] |= 0x01 << bit_idx;
             }
         }
-
-        let mut msg_out = RendezvousMessage::new();
-        msg_out.set_online_response(OnlineResponse {
-            states: states.into(),
-            ..Default::default()
-        });
-        stream.send(&msg_out).await?;
-
-        Ok(())
     }
+
+    let mut msg_out = RendezvousMessage::new();
+    msg_out.set_online_response(OnlineResponse {
+        states: states.into(),
+        ..Default::default()
+    });
+    stream.send(&msg_out).await?;
+
+    Ok(())
+}
 
     #[inline]
     async fn send_to_tcp(&mut self, msg: RendezvousMessage, addr: SocketAddr) {
