@@ -1,5 +1,5 @@
 use crate::common::*;
-use crate::peer::PeerMap;
+use crate::peer::*;
 use hbb_common::{
     allow_err, bail,
     bytes::{Bytes, BytesMut},
