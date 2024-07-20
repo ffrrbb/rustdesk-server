@@ -178,7 +178,6 @@ impl PeerMap {
         self.map.read().await.contains_key(id)
     }
 
-    // Añadir la función para actualizar el status
     pub(crate) async fn update_status(&self, id: &str, status: Option<i64>) -> ResultType<()> {
         match self.db.update_peer_status(id, status).await {
             Ok(_) => {
