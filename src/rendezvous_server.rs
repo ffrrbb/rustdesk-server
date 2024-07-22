@@ -793,8 +793,6 @@ impl RendezvousServer {
                     .await?;
             }
         }
-   
-
         let mut msg_out = RendezvousMessage::new();
         msg_out.set_online_response(OnlineResponse {
             states: states.into(),
@@ -804,17 +802,7 @@ impl RendezvousServer {
 
         Ok(())
     }
-
-
-        let mut msg_out = RendezvousMessage::new();
-        msg_out.set_online_response(OnlineResponse {
-            states: states.into(),
-            ..Default::default()
-        });
-        stream.send(&msg_out).await?;
-
-        Ok(())
-    }
+    
     #[inline]
     async fn send_to_tcp(&mut self, msg: RendezvousMessage, addr: SocketAddr) {
         let mut tcp = self.tcp_punch.lock().await.remove(&try_into_v4(addr));
