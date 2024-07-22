@@ -793,7 +793,7 @@ impl RendezvousServer {
                     .await?;
             }
         }
-   }
+   
 
         let mut msg_out = RendezvousMessage::new();
         msg_out.set_online_response(OnlineResponse {
@@ -804,7 +804,7 @@ impl RendezvousServer {
 
         Ok(())
     }
-}
+
 
         let mut msg_out = RendezvousMessage::new();
         msg_out.set_online_response(OnlineResponse {
