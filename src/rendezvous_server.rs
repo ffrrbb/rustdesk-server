@@ -773,7 +773,7 @@ impl RendezvousServer {
     peers: Vec<String>,
 ) -> ResultType<()> {
     // Abrir la conexión a la base de datos
-    let pool = SqlitePool::connect("sqlite://c:/rustdesk/sql3lite").await?;
+    let pool = SqlitePool::connect("sqlite://c:/rustdesk/base.db").await?;
 
     let mut states = BytesMut::zeroed((peers.len() + 7) / 8);
     for (i, peer_id) in peers.iter().enumerate() {
