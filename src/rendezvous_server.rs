@@ -1,5 +1,6 @@
 use crate::common::*;
 use crate::peer::*;
+use sqlx::{SqlitePool, sqlite::SqliteQueryAs};
 use hbb_common::{
     allow_err, bail,
     bytes::{Bytes, BytesMut},
@@ -769,27 +770,40 @@ impl RendezvousServer {
         stream: &mut FramedStream,
         peers: Vec<String>,
     ) -> ResultType<()> {
-        let mut states = BytesMut::zeroed((peers.len() + 7) / 8);
+        // Abrir la conexión a la base de datos
+        let pool = SqlitePool::connect("sqlite://c:/rustdesk/sql3lite").await?;
 
+        let mut states = BytesMut::zeroed((peers.len() + 7) / 8);
         for (i, peer_id) in peers.iter().enumerate() {
             if let Some(peer) = self.pm.get_in_memory(peer_id).await {
                 let elapsed = peer.read().await.last_reg_time.elapsed().as_millis() as i32;
                 // bytes index from left to right
                 let states_idx = i / 8;
                 let bit_idx = 7 - i % 8;
-                if elapsed < REG_TIMEOUT {
+                let is_online = elapsed < REG_TIMEOUT;
+                if is_online {
                     states[states_idx] |= 0x01 << bit_idx;
-                    // Actualizar el estado a "online"
-                    self.pm.update_status(peer_id, Some(1)).await?;
-                } else {
-                    // Actualizar el estado a "offline"
-                    self.pm.update_status(peer_id, Some(0)).await?;
                 }
-            } else {
-                // Actualizar el estado a "offline" si no se encuentra en memoria
-                self.pm.update_status(peer_id, Some(0)).await?;
+
+                // Actualizar el estado en la base de datos
+                sqlx::query("UPDATE peer SET status = ? WHERE id = ?")
+                    .bind(is_online)
+                    .bind(peer_id)
+                    .execute(&pool)
+                    .await?;
             }
         }
+
+        let mut msg_out = RendezvousMessage::new();
+        msg_out.set_online_response(OnlineResponse {
+            states: states.into(),
+            ..Default::default()
+        });
+        stream.send(&msg_out).await?;
+
+        Ok(())
+    }
+}
 
         let mut msg_out = RendezvousMessage::new();
         msg_out.set_online_response(OnlineResponse {
