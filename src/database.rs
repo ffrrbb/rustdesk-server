@@ -142,17 +142,6 @@ impl Database {
         .await?;
         Ok(())
     }
-
-     pub async fn update_peer_status(&self, id: &str, status: Option<i64>) -> ResultType<()> {
-        sqlx::query!(
-            "UPDATE peers SET status = ? WHERE id = ?",
-            status,
-            id
-        )
-         .execute(self.pool.get().await?.deref_mut())
-        .await?;
-        Ok(())
-    }
 }
 
 #[cfg(test)]
